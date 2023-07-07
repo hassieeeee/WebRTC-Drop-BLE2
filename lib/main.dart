@@ -9,6 +9,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'src/call_sample/signaling.dart';
+import 'src/utils/device_info.dart';
+import 'dart:developer';
 
 void main() => runApp(new MyApp());
 
@@ -45,6 +47,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Timer? _timer;
   var _text = '';
 
+  String params = '---';
+  final list = [];
+  int listindex = 0;
+
   // ignore: unused_element
 
   Image? _image;
@@ -53,6 +59,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   _MyHomePageState();
 
+  String remotePeerName = '';
+  String receivedContent = '';
+
   @override
   deactivate() {
     super.deactivate();
@@ -60,8 +69,70 @@ class _MyHomePageState extends State<MyHomePage> {
     _timer?.cancel();
   }
 
-  void _connect(BuildContext context) async {
-    _signaling?.connect();
+  Future<dynamic> _platformCallHandler(MethodCall call) async {
+    switch (call.method) {
+      case 'receive':
+        if(call.arguments != 'fin'){
+          setState(() {
+            receivedContent = receivedContent + call.arguments;
+          });
+          break;
+        }else{
+          print('call callMe : arguments = ' + receivedContent);
+          _signaling?.onMessage(receivedContent);
+
+          Map<String, dynamic> mapData = jsonDecode(receivedContent);
+          if (mapData['type'] == 'IdOffer') {
+            setState(() {
+              remotePeerName = mapData['data']['myName'];
+            });
+            //確認ダイアログをだしてOKだったらIdAnswer
+            bool answer = await showDialog(
+                context: context,
+                builder: (_) {
+                  return PeerConfirmDialog(remotePeerName);
+                });
+            if (answer == true) {
+              _signaling?.createIdAnswer(remotePeerName, list[listindex].address);
+              log('created Answer !!');
+            }else{
+              log('not created');
+            }
+            log('answer = $answer');
+          } else if (mapData['type'] == 'IdAnswer') {
+            setState(() {
+              remotePeerName = mapData['data']['myName'];
+            });
+            _invitePeer(context, list[listindex].address);
+          }
+          setState(() {
+            receivedContent = '';
+          });
+          break;
+        }
+
+      case 'ScanResultTerminalMap':
+        setState(() {
+          print('${call.arguments}');
+          Map<String, dynamic> terminalMap = jsonDecode(call.arguments);
+          list.clear();
+          terminalMap.forEach((k, v) => list.add(Device(k, v)));
+        });
+        break;
+      default:
+        print('Unknowm method ${call.method}');
+        throw MissingPluginException();
+        break;
+    }
+  }
+
+  void setIndex(int n) {
+    listindex = n;
+  }
+
+  void _connect(BuildContext context,String address) async {
+    await _signaling?.BLEConnect(address);
+    //_signaling?.createIdOffer(DeviceInfo.label, address);
     List<int> list = <int>[];
     Uint8List list8 = Uint8List(0);
 
@@ -155,20 +226,20 @@ class _MyHomePageState extends State<MyHomePage> {
     _signaling?.bye(_session!.sid);
   }
 
-  _buildRow(context, peer) {
-    var self = (peer['id'] == _selfId);
-    return ListBody(children: <Widget>[
-      ListTile(
-        title: Text(self
-            ? peer['name'] + ', ID: ${peer['id']} ' + ' [Your self]'
-            : peer['name'] + ', ID: ${peer['id']} '),
-        onTap: () => _invitePeer(context, peer['id']),
-        trailing: Icon(Icons.sms),
-        subtitle: Text('[' + peer['user_agent'] + ']'),
-      ),
-      Divider()
-    ]);
-  }
+  // _buildRow(context, peer) {
+  //   var self = (peer['id'] == _selfId);
+  //   return ListBody(children: <Widget>[
+  //     ListTile(
+  //       title: Text(self
+  //           ? peer['name'] + ', ID: ${peer['id']} ' + ' [Your self]'
+  //           : peer['name'] + ', ID: ${peer['id']} '),
+  //       onTap: () => _invitePeer(context, peer['id']),
+  //       trailing: Icon(Icons.sms),
+  //       subtitle: Text('[' + peer['user_agent'] + ']'),
+  //     ),
+  //     Divider()
+  //   ]);
+  // }
 
   void _uploadPicture(Image? image) {
     setState(() {
@@ -220,17 +291,17 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   initState() {
     super.initState();
-    _signaling ??= Signaling(platform,context);//インスタンス化
-    _signaling?.HandlerSet();//Kotlinからデータを受け取るハンドラをセット
-    _signaling?.BLEKotlinStart();//Kotlinを起動し、アドバタイズを始める
+    _signaling ??= Signaling(platform, context); //インスタンス化
+    platform
+        .setMethodCallHandler(_platformCallHandler); //Kotlinからデータを受け取るハンドラをセット
+    _signaling?.KotlinStart(); //Kotlinを起動し、アドバタイズを始める
   }
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selfId != null ? ' [Your ID ($_selfId)] ' : ''),
+        title: Text('WebRTC Drop BLE'),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.settings),
@@ -245,7 +316,12 @@ class _MyHomePageState extends State<MyHomePage> {
               tooltip: 'Hangup',
               child: Icon(Icons.call_end),
             )
-          : null,
+          : FloatingActionButton(
+              onPressed: () => _signaling?.Scan(),
+              child: const Icon(
+                Icons.search,
+                size: 40,
+              )),
       body: _inCalling
           ? Center(
               //
@@ -342,11 +418,27 @@ class _MyHomePageState extends State<MyHomePage> {
               //
             )
           : ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(0.0),
-              itemCount: (_peers != null ? _peers.length : 0),
-              itemBuilder: (context, i) {
-                return _buildRow(context, _peers[i]);
+              padding: const EdgeInsets.all(8),
+              itemCount: list.length, //List(List名).length
+              itemBuilder: (BuildContext context, int index) {
+                return ListBody(
+                  children: [
+                    ListTile(
+                        title: Text(
+                          list[index].name,
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(list[index].address),
+                        trailing: Icon(Icons.sms),
+                        onTap: (){
+                          setIndex(index);
+                          _connect(context, list[index].address);
+                          _signaling?.createIdOffer(DeviceInfo.label, list[index].address);
+                        }),
+                    Divider()
+                  ],
+                );
               }),
     );
   }
@@ -431,6 +523,64 @@ class AlertDialogConfirm extends StatelessWidget {
               ),
             )),
       ],
+    );
+  }
+}
+
+class PeerConfirmDialog extends StatelessWidget {
+  const PeerConfirmDialog(this.remotePeerName, {Key? key}) : super(key: key);
+  final String remotePeerName;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+      title: Text('Invited from ' + remotePeerName),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Do you accept?'),
+          SizedBox(
+            height: 20,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 50,
+                width: 100,
+                child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(false);
+                    },
+                    child: Text(
+                      'Ignore',
+                      style: TextStyle(
+                        fontSize: 20,
+                      ),
+                    )),
+              ),
+              SizedBox(
+                height: 50,
+                width: 100,
+                child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(true);
+                    },
+                    child: Text(
+                      'Accept',
+                      style: TextStyle(
+                        fontSize: 20,
+                      ),
+                    )),
+              ),
+            ],
+          )
+        ],
+      ),
     );
   }
 }

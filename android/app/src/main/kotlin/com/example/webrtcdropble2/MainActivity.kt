@@ -304,6 +304,7 @@ class MainActivity : FlutterActivity() {
                 }
                 val success = it.writeCharacteristic(messageCharacteristic)
                 Log.d(TAG, "sendMessage: send $message")
+                Log.d(TAG, "sendMessage: ${messageCharacteristic.toString()}")
             } ?: kotlin.run {
                 Log.d(TAG, "sendMessage: no gatt connection")
             }

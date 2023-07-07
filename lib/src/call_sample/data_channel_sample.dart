@@ -50,7 +50,7 @@ class _DataChannelSampleState extends State<DataChannelSample> {
   }
 
   void _connect(BuildContext context) async {
-    _signaling ??= Signaling(widget.host, context)..connect();
+    //_signaling ??= Signaling(widget.host, context)..connect();
     List<int> list = <int>[];
     Uint8List list8 = Uint8List(0);
 

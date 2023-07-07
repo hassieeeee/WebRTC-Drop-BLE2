@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:flutter/services.dart';
@@ -48,16 +49,13 @@ class Device {
 }
 
 class Signaling {
-  Signaling(this._platform, this._context);
+  Signaling(this.platform, this._context);
 
-  final MethodChannel _platform;
-  String params = '---';
-  final list = [];
-  int listindex = 0;
+  final MethodChannel platform;
 
   JsonEncoder _encoder = JsonEncoder();
   JsonDecoder _decoder = JsonDecoder();
-  String _selfId = randomNumeric(6);
+  String _selfId = '000000';
   SimpleWebSocket? _socket;
   BuildContext? _context;
   var _turnCredential;
@@ -108,53 +106,36 @@ class Signaling {
     'optional': [],
   };
 
-  Future<dynamic> _platformCallHandler(MethodCall call) async {
-    switch (call.method) {
-      case 'receive':
-        print('call callMe : arguments = ${call.arguments}');
-        params = call.arguments;
-        break;
+  Future<void> KotlinStart() async {
+    await platform.invokeMethod('KotlinStart');
+  }
 
-      case 'ScanResultTerminalMap':
-        print('${call.arguments}');
-        Map<String, dynamic> terminalMap = jsonDecode(call.arguments);
-        list.clear();
-        terminalMap.forEach((k, v) => list.add(Device(k, v)));
-        break;
+  Future<void> Scan() async {
+    await platform.invokeMethod('Scan');
+  }
 
-      default:
-        print('Unknowm method ${call.method}');
-        throw MissingPluginException();
-        break;
+  Future<void> BLEConnect(String address) async {
+    await platform.invokeMethod('connect', address);
+  }
+
+  Future<void> WriteMessage(String content) async {
+    int length = content.length;
+    log('$length');
+    int listNow = 0;
+    for (int i = 17; i < length; listNow = listNow + 17, i = i + 17) {
+      platform.invokeMethod('WriteMessage', content.substring(listNow, i));
+      await Future.delayed(Duration(milliseconds: 500));
+      log('send: '+content.substring(listNow,i));
     }
-  }
-
-  void HandlerSet(){
-    _platform.setMethodCallHandler(_platformCallHandler);
-  }
-
-  Future<void> _KotlinStart() async {
-    await _platform.invokeMethod('KotlinStart');
-  }
-  void BLEKotlinStart() {
-    _KotlinStart();
-  }
-
-  Future<void> _Scan() async {
-    await _platform.invokeMethod('Scan');
-  }
-
-  Future<void> _connect(String address) async {
-    await _platform.invokeMethod('connect', address);
-  }
-
-  Future<void> _WriteMessage(String content) async {
-    await _platform.invokeMethod('WriteMessage', content);
+    platform.invokeMethod('WriteMessage', content.substring(listNow, length));
+    log('send: '+content.substring(listNow,length));
+    await Future.delayed(Duration(milliseconds: 500));
+    platform.invokeMethod('WriteMessage', 'fin');
   }
 
   close() async {
     await _cleanSessions();
-    _socket?.close();
+    //_socket?.close();
   }
 
   // void switchCamera() {
@@ -235,22 +216,22 @@ class Signaling {
     bye(session.sid);
   }
 
-  void onMessage(message) async {
-    Map<String, dynamic> mapData = message;
+  void onMessage(messageJson) async {
+    Map<String, dynamic> mapData = _decoder.convert(messageJson);
     var data = mapData['data'];
 
     switch (mapData['type']) {
-      case 'peers':
-        {
-          List<dynamic> peers = data;
-          if (onPeersUpdate != null) {
-            Map<String, dynamic> event = Map<String, dynamic>();
-            event['self'] = _selfId;
-            event['peers'] = peers;
-            onPeersUpdate?.call(event);
-          }
-        }
-        break;
+      // case 'peers':
+      //   {
+      //     List<dynamic> peers = data;
+      //     if (onPeersUpdate != null) {
+      //       Map<String, dynamic> event = Map<String, dynamic>();
+      //       event['self'] = _selfId;
+      //       event['peers'] = peers;
+      //       onPeersUpdate?.call(event);
+      //     }
+      //   }
+      //   break;
       case 'offer':
         {
           var peerId = data['from'];
@@ -331,6 +312,16 @@ class Signaling {
           print('keepalive response!');
         }
         break;
+      case 'IdOffer':
+        {
+          _selfId = data['yourAddressId'];
+        }
+        break;
+      case 'IdAnswer':
+        {
+          _selfId = data['yourAddressId'];
+        }
+        break;
       default:
         break;
     }
@@ -365,27 +356,27 @@ class Signaling {
     //   } catch (e) {}
     // }
 
-    _socket?.onOpen = () {
-      print('onOpen');
-      onSignalingStateChange?.call(SignalingState.ConnectionOpen);
-      _send('new', {
-        'name': DeviceInfo.label,
-        'id': _selfId,
-        'user_agent': DeviceInfo.userAgent
-      });
-    };
+    // _socket?.onOpen = () {
+    //   print('onOpen');
+    //   onSignalingStateChange?.call(SignalingState.ConnectionOpen);
+    //   _send('new', {
+    //     'name': DeviceInfo.label,
+    //     'id': _selfId,
+    //     'user_agent': DeviceInfo.userAgent
+    //   });
+    // };
 
-    _socket?.onMessage = (message) {
-      print('Received data: ' + message);
-      onMessage(_decoder.convert(message));
-    };
+    // _socket?.onMessage = (message) {
+    //   print('Received data: ' + message);
+    //   onMessage(_decoder.convert(message));
+    // };
 
-    _socket?.onClose = (int? code, String? reason) {
-      print('Closed by server [$code => $reason]!');
-      onSignalingStateChange?.call(SignalingState.ConnectionClosed);
-    };
+    // _socket?.onClose = (int? code, String? reason) {
+    //   print('Closed by server [$code => $reason]!');
+    //   onSignalingStateChange?.call(SignalingState.ConnectionClosed);
+    // };
 
-    await _socket?.connect();
+    // await _socket?.connect();
   }
 
   // Future<MediaStream> createStream(String media, bool userScreen,
@@ -546,11 +537,28 @@ class Signaling {
     }
   }
 
-  _send(event, data) {
+  void createIdOffer(String myName, String yourAddress){
+    _send('IdOffer', {
+      'myName': myName,
+      'yourAddressId': yourAddress,
+    });
+  }
+
+  void createIdAnswer(String myName, String yourAddress) {
+    _send('IdAnswer', {
+      'myName': myName,
+      'yourAddressId': yourAddress,
+    });
+  }
+
+  void _send(event, data) {
     var request = Map();
     request["type"] = event;
     request["data"] = data;
-    _socket?.send(_encoder.convert(request));
+    print('request = '+ request.toString());
+    //request = {'content': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'};
+    WriteMessage(_encoder.convert(request));
+    //_socket?.send(_encoder.convert(request));
   }
 
   Future<void> _cleanSessions() async {
