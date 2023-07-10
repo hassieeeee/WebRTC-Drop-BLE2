@@ -41,6 +41,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Signaling? _signaling;
   List<dynamic> _peers = [];
   String? _selfId;
+  String? _peerId;
   bool _inCalling = false;
   RTCDataChannel? _dataChannel;
   Session? _session;
@@ -72,19 +73,28 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<dynamic> _platformCallHandler(MethodCall call) async {
     switch (call.method) {
       case 'receive':
-        if(call.arguments != 'fin'){
+        String content = call.arguments;
+        int length = content.length;
+        if (content.substring(length-3,length) != 'fin') {
           setState(() {
-            receivedContent = receivedContent + call.arguments;
+            receivedContent = receivedContent + content;
           });
           break;
-        }else{
+        } else {
+          setState(() {
+            receivedContent = receivedContent + content.substring(0,length-3);
+          });
           print('call callMe : arguments = ' + receivedContent);
           _signaling?.onMessage(receivedContent);
 
           Map<String, dynamic> mapData = jsonDecode(receivedContent);
+          setState(() {
+            receivedContent = '';
+          });
           if (mapData['type'] == 'IdOffer') {
             setState(() {
               remotePeerName = mapData['data']['myName'];
+              _peerId = mapData['data']['Id'];
             });
             //確認ダイアログをだしてOKだったらIdAnswer
             bool answer = await showDialog(
@@ -93,21 +103,19 @@ class _MyHomePageState extends State<MyHomePage> {
                   return PeerConfirmDialog(remotePeerName);
                 });
             if (answer == true) {
-              _signaling?.createIdAnswer(remotePeerName, list[listindex].address);
-              log('created Answer !!');
-            }else{
+              log('created Answer !!'+remotePeerName);
+              _signaling?.createIdAnswer(remotePeerName);
+            } else {
               log('not created');
             }
             log('answer = $answer');
           } else if (mapData['type'] == 'IdAnswer') {
             setState(() {
               remotePeerName = mapData['data']['myName'];
+              _peerId = mapData['data']['Id'];
             });
-            _invitePeer(context, list[listindex].address);
+            _invitePeer(context, _peerId);
           }
-          setState(() {
-            receivedContent = '';
-          });
           break;
         }
 
@@ -130,7 +138,7 @@ class _MyHomePageState extends State<MyHomePage> {
     listindex = n;
   }
 
-  void _connect(BuildContext context,String address) async {
+  void _connect(BuildContext context, String address) async {
     await _signaling?.BLEConnect(address);
     //_signaling?.createIdOffer(DeviceInfo.label, address);
     List<int> list = <int>[];
@@ -208,12 +216,12 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     };
 
-    _signaling?.onPeersUpdate = ((event) {
-      setState(() {
-        _selfId = event['self'];
-        _peers = event['peers'];
-      });
-    });
+    // _signaling?.onPeersUpdate = ((event) {
+    //   setState(() {
+    //     _selfId = event['self'];
+    //     _peers = event['peers'];
+    //   });
+    // });
   }
 
   _invitePeer(context, peerId) async {
@@ -295,6 +303,7 @@ class _MyHomePageState extends State<MyHomePage> {
     platform
         .setMethodCallHandler(_platformCallHandler); //Kotlinからデータを受け取るハンドラをセット
     _signaling?.KotlinStart(); //Kotlinを起動し、アドバタイズを始める
+    _selfId = _signaling?.getSelfId();
   }
 
   @override
@@ -431,10 +440,10 @@ class _MyHomePageState extends State<MyHomePage> {
                         ),
                         subtitle: Text(list[index].address),
                         trailing: Icon(Icons.sms),
-                        onTap: (){
+                        onTap: () {
                           setIndex(index);
                           _connect(context, list[index].address);
-                          _signaling?.createIdOffer(DeviceInfo.label, list[index].address);
+                          _signaling?.createIdOffer(DeviceInfo.label);
                         }),
                     Divider()
                   ],

@@ -55,7 +55,7 @@ class Signaling {
 
   JsonEncoder _encoder = JsonEncoder();
   JsonDecoder _decoder = JsonDecoder();
-  String _selfId = '000000';
+  String _selfId = randomNumeric(6);
   SimpleWebSocket? _socket;
   BuildContext? _context;
   var _turnCredential;
@@ -119,18 +119,22 @@ class Signaling {
   }
 
   Future<void> WriteMessage(String content) async {
+    content = content + 'fin';
     int length = content.length;
     log('$length');
     int listNow = 0;
-    for (int i = 17; i < length; listNow = listNow + 17, i = i + 17) {
+    await Future.delayed(Duration(milliseconds: 2000));
+    for (int i = 500; i < length; listNow = listNow + 500, i = i + 500) {
       platform.invokeMethod('WriteMessage', content.substring(listNow, i));
-      await Future.delayed(Duration(milliseconds: 500));
+      await Future.delayed(Duration(milliseconds: 150));
       log('send: '+content.substring(listNow,i));
     }
     platform.invokeMethod('WriteMessage', content.substring(listNow, length));
     log('send: '+content.substring(listNow,length));
-    await Future.delayed(Duration(milliseconds: 500));
-    platform.invokeMethod('WriteMessage', 'fin');
+  }
+
+  String getSelfId(){
+    return _selfId;
   }
 
   close() async {
@@ -200,13 +204,13 @@ class Signaling {
     }
   }
 
-  void accept(String sessionId) {
-    var session = _sessions[sessionId];
-    if (session == null) {
-      return;
-    }
-    _createAnswer(session, 'video');
-  }
+  // void accept(String sessionId) {
+  //   var session = _sessions[sessionId];
+  //   if (session == null) {
+  //     return;
+  //   }
+  //   _createAnswer(session, 'video');
+  // }
 
   void reject(String sessionId) {
     var session = _sessions[sessionId];
@@ -252,10 +256,12 @@ class Signaling {
           if (newSession.remoteCandidates.length > 0) {
             newSession.remoteCandidates.forEach((candidate) async {
               await newSession.pc?.addCandidate(candidate);
+              log('candidates added');
             });
             newSession.remoteCandidates.clear();
           }
           onCallStateChange?.call(newSession, CallState.CallStateNew);
+          log('newwwwwwwwwwwwwwwwww');
           onCallStateChange?.call(newSession, CallState.CallStateRinging);
         }
         break;
@@ -312,16 +318,16 @@ class Signaling {
           print('keepalive response!');
         }
         break;
-      case 'IdOffer':
-        {
-          _selfId = data['yourAddressId'];
-        }
-        break;
-      case 'IdAnswer':
-        {
-          _selfId = data['yourAddressId'];
-        }
-        break;
+      // case 'IdOffer':
+      //   {
+      //     _selfId = data['Id'];
+      //   }
+      //   break;
+      // case 'IdAnswer':
+      //   {
+      //     _selfId = data['Id'];
+      //   }
+      //   break;
       default:
         break;
     }
@@ -449,7 +455,7 @@ class Signaling {
       // before skipping to the next one. 1 second is just an heuristic value
       // and should be thoroughly tested in your own environment.
       await Future.delayed(
-          const Duration(seconds: 1),
+          const Duration(milliseconds: 1000),
           () => _send('candidate', {
                 'to': peerId,
                 'from': _selfId,
@@ -537,17 +543,17 @@ class Signaling {
     }
   }
 
-  void createIdOffer(String myName, String yourAddress){
+  void createIdOffer(String myName,){
     _send('IdOffer', {
       'myName': myName,
-      'yourAddressId': yourAddress,
+      'Id': _selfId,
     });
   }
 
-  void createIdAnswer(String myName, String yourAddress) {
+  void createIdAnswer(String myName,) {
     _send('IdAnswer', {
       'myName': myName,
-      'yourAddressId': yourAddress,
+      'Id': _selfId,
     });
   }
 
@@ -556,9 +562,7 @@ class Signaling {
     request["type"] = event;
     request["data"] = data;
     print('request = '+ request.toString());
-    //request = {'content': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'};
     WriteMessage(_encoder.convert(request));
-    //_socket?.send(_encoder.convert(request));
   }
 
   Future<void> _cleanSessions() async {

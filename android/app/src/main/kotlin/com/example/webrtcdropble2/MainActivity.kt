@@ -165,10 +165,10 @@ class MainActivity : FlutterActivity() {
 
     }
 
-    private fun rep(x: String): String {
-
-        return "hello"
-    }
+//    private fun rep(x: String): String {
+//
+//        return "hello"
+//    }
 
 
     @RequiresApi(VERSION_CODES.LOLLIPOP)
@@ -347,6 +347,9 @@ class MainActivity : FlutterActivity() {
             super.onConnectionStateChange(device, status, newState)
             val isSuccess = status == BluetoothGatt.GATT_SUCCESS
             val isConnected = newState == BluetoothProfile.STATE_CONNECTED
+            if (device != null) {
+                connectfromaddress(device.address,application)
+            }
         }
 
         @UiThread
@@ -399,6 +402,11 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        ///////////////////MTUのための追加分/////////////////////////
+        override fun onMtuChanged(device: BluetoothDevice?, mtu: Int) {
+            Log.d(TAG, "onMtuChanged: $mtu")
+        }
+        //////////////////////ここまで//////////////////////////////
     }
 
     @RequiresApi(VERSION_CODES.JELLY_BEAN_MR2)
@@ -412,18 +420,44 @@ class MainActivity : FlutterActivity() {
                 TAG,
                 "onConnectionStateChange: Client $gatt  success: $isSuccess  connected: $isConnected"
             )
-            if (isSuccess && isConnected) {
+            ////////////////////MTUのために追加/////////////////////////
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                // 接続成功時にMTU交渉を開始
                 if (ActivityCompat.checkSelfPermission(
                         application,
                         Manifest.permission.BLUETOOTH_CONNECT
                     ) != PackageManager.PERMISSION_GRANTED
                 ) {
-                    Log.d(TAG, "onConnectionStateChange: permission")
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
                     return
                 }
-                Log.d(TAG, "onConnectionStateChange: gattdiscoverservice")
-                gatt?.discoverServices()
+                if (gatt != null) {
+                    if (gatt.requestMtu(512)) {
+                        Log.d(TAG, "Requested MTU successfully");
+                    } else {
+                        Log.d(TAG, "Failed to request MTU");
+                    }
+                }
             }
+            ///////////////////////////////////ここまで追加分////////////////
+//            if (isSuccess && isConnected) {
+//                if (ActivityCompat.checkSelfPermission(
+//                        application,
+//                        Manifest.permission.BLUETOOTH_CONNECT
+//                    ) != PackageManager.PERMISSION_GRANTED
+//                ) {
+//                    Log.d(TAG, "onConnectionStateChange: permission")
+//                    return
+//                }
+//                Log.d(TAG, "onConnectionStateChange: gattdiscoverservice")
+//                gatt?.discoverServices()
+//            }
         }
 
         override fun onServicesDiscovered(discoveredgatt: BluetoothGatt?, status: Int) {
@@ -434,6 +468,33 @@ class MainActivity : FlutterActivity() {
                 val service = discoveredgatt?.getService(SERVICE_UUID)
                 if (service != null) {
                     messageCharacteristic = service.getCharacteristic(MESSAGE_UUID)
+                }
+            }
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            Log.d(TAG,"onMtuChanged: $mtu")
+
+            // Exchange MTU Requestが完了してからサービスの検出を開始する
+            if (gatt != null) {
+                if (ActivityCompat.checkSelfPermission(
+                        application,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    // TODO: Consider calling
+                    //    ActivityCompat#requestPermissions
+                    // here to request the missing permissions, and then overriding
+                    //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                    //                                          int[] grantResults)
+                    // to handle the case where the user grants the permission. See the documentation
+                    // for ActivityCompat#requestPermissions for more details.
+                    return
+                }
+                if (gatt.discoverServices()) {
+                    Log.d(TAG, "Started discovering services")
+                } else {
+                    Log.d(TAG, "Failed to start discovering services")
                 }
             }
         }
