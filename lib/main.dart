@@ -84,7 +84,7 @@ class _MyHomePageState extends State<MyHomePage> {
           setState(() {
             receivedContent = receivedContent + content.substring(0,length-3);
           });
-          print('call callMe : arguments = ' + receivedContent);
+          //print('call callMe : arguments = ' + receivedContent);
           _signaling?.onMessage(receivedContent);
 
           Map<String, dynamic> mapData = jsonDecode(receivedContent);
@@ -144,77 +144,7 @@ class _MyHomePageState extends State<MyHomePage> {
     List<int> list = <int>[];
     Uint8List list8 = Uint8List(0);
 
-    _signaling?.onDataChannelMessage =
-        (_, dc, RTCDataChannelMessage data) async {
-      if (data.isBinary) {
-        if (list.isEmpty) {
-          list = data.binary.toList();
-        } else {
-          list = list + data.binary.toList();
-        }
-      } else if (data.text == 'finish') {
-        list8 = Uint8List.fromList(list);
-        _viewImage2(list8);
-        await _dataChannel?.send(RTCDataChannelMessage('ok'));
-        bool answer = await showDialog(
-            context: context,
-            builder: (_) {
-              return AlertDialogSample();
-            });
-        if (answer) {
-          await _saveImage2(list8);
-        }
-        list.clear();
-        list8.removeRange(0, list8.length);
-      } else {
-        await showDialog(
-            context: context,
-            builder: (_) {
-              return AlertDialogConfirm();
-            });
-      }
-    };
 
-    _signaling?.onDataChannel = (_, channel) {
-      _dataChannel = channel;
-    };
-
-    _signaling?.onSignalingStateChange = (SignalingState state) {
-      switch (state) {
-        case SignalingState.ConnectionClosed:
-        case SignalingState.ConnectionError:
-        case SignalingState.ConnectionOpen:
-          break;
-      }
-    };
-
-    _signaling?.onCallStateChange = (Session session, CallState state) {
-      switch (state) {
-        case CallState.CallStateNew:
-          {
-            setState(() {
-              _session = session;
-              _inCalling = true;
-            });
-          }
-          break;
-        case CallState.CallStateBye:
-          {
-            setState(() {
-              _inCalling = false;
-            });
-            _timer?.cancel();
-            _dataChannel = null;
-            _inCalling = false;
-            _session = null;
-            _text = '';
-            break;
-          }
-        case CallState.CallStateInvite:
-        case CallState.CallStateConnected:
-        case CallState.CallStateRinging:
-      }
-    };
 
     // _signaling?.onPeersUpdate = ((event) {
     //   setState(() {
@@ -304,6 +234,82 @@ class _MyHomePageState extends State<MyHomePage> {
         .setMethodCallHandler(_platformCallHandler); //Kotlinからデータを受け取るハンドラをセット
     _signaling?.KotlinStart(); //Kotlinを起動し、アドバタイズを始める
     _selfId = _signaling?.getSelfId();
+
+
+    List<int> list = <int>[];
+    Uint8List list8 = Uint8List(0);
+    _signaling?.onDataChannelMessage =
+        (_, dc, RTCDataChannelMessage data) async {
+      if (data.isBinary) {
+        if (list.isEmpty) {
+          list = data.binary.toList();
+        } else {
+          list = list + data.binary.toList();
+        }
+      } else if (data.text == 'finish') {
+        list8 = Uint8List.fromList(list);
+        _viewImage2(list8);
+        await _dataChannel?.send(RTCDataChannelMessage('ok'));
+        bool answer = await showDialog(
+            context: context,
+            builder: (_) {
+              return AlertDialogSample();
+            });
+        if (answer) {
+          await _saveImage2(list8);
+        }
+        list.clear();
+        list8.removeRange(0, list8.length);
+      } else {
+        await showDialog(
+            context: context,
+            builder: (_) {
+              return AlertDialogConfirm();
+            });
+      }
+    };
+
+    _signaling?.onDataChannel = (_, channel) {
+      _dataChannel = channel;
+    };
+
+    _signaling?.onSignalingStateChange = (SignalingState state) {
+      switch (state) {
+        case SignalingState.ConnectionClosed:
+        case SignalingState.ConnectionError:
+        case SignalingState.ConnectionOpen:
+          break;
+      }
+    };
+
+    _signaling?.onCallStateChange = (Session session, CallState state) {
+      switch (state) {
+        case CallState.CallStateNew:
+          {
+            setState(() {
+              _session = session;
+              _inCalling = true;
+            });
+            log('callState:new');
+          }
+          break;
+        case CallState.CallStateBye:
+          {
+            setState(() {
+              _inCalling = false;
+            });
+            _timer?.cancel();
+            _dataChannel = null;
+            _inCalling = false;
+            _session = null;
+            _text = '';
+            break;
+          }
+        case CallState.CallStateInvite:
+        case CallState.CallStateConnected:
+        case CallState.CallStateRinging:
+      }
+    };
   }
 
   @override

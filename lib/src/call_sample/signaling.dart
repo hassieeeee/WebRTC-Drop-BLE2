@@ -48,10 +48,44 @@ class Device {
   String address;
 }
 
+class IntervalSender {
+  IntervalSender(this.platform);
+
+  final MethodChannel platform;
+  List<String> sendContents = [];
+  int nowIndex = -1;
+  int preIndex = -1;
+  bool stopSend = false;
+
+  //一回呼び出せば送信し続ける
+  Future<void> intervalSend() async{
+    //await Future.delayed(Duration(milliseconds: 4000));
+    while(true){
+      await Future.delayed(Duration(milliseconds: 150));
+      if(preIndex < nowIndex){
+        preIndex += 1;
+        platform.invokeMethod('WriteMessage', sendContents[preIndex]);
+      }
+      if(stopSend) break;
+    }
+  }
+
+  void addContent(String content){
+    sendContents.add(content + 'fin');
+    nowIndex += 1;
+  }
+
+  void stop(){
+    stopSend = true;
+  }
+
+}
+
 class Signaling {
   Signaling(this.platform, this._context);
 
   final MethodChannel platform;
+  IntervalSender? _intervalsender;
 
   JsonEncoder _encoder = JsonEncoder();
   JsonDecoder _decoder = JsonDecoder();
@@ -64,6 +98,7 @@ class Signaling {
   List<MediaStream> _remoteStreams = <MediaStream>[];
   List<RTCRtpSender> _senders = <RTCRtpSender>[];
   VideoSource _videoSource = VideoSource.Camera;
+
 
   Function(SignalingState state)? onSignalingStateChange;
   Function(Session session, CallState state)? onCallStateChange;
@@ -123,7 +158,7 @@ class Signaling {
     int length = content.length;
     log('$length');
     int listNow = 0;
-    await Future.delayed(Duration(milliseconds: 2000));
+    //await Future.delayed(Duration(milliseconds: 2000));
     for (int i = 500; i < length; listNow = listNow + 500, i = i + 500) {
       platform.invokeMethod('WriteMessage', content.substring(listNow, i));
       await Future.delayed(Duration(milliseconds: 150));
@@ -131,6 +166,10 @@ class Signaling {
     }
     platform.invokeMethod('WriteMessage', content.substring(listNow, length));
     log('send: '+content.substring(listNow,length));
+  }
+
+  void setIntervalSender(){
+    _intervalsender = IntervalSender(platform);
   }
 
   String getSelfId(){
@@ -185,6 +224,7 @@ class Signaling {
         media: media,
         screenSharing: useScreen);
     _sessions[sessionId] = session;
+    log('session created');
     if (media == 'data') {
       _createDataChannel(session);
     }
@@ -238,6 +278,8 @@ class Signaling {
       //   break;
       case 'offer':
         {
+          setIntervalSender();
+          _intervalsender?.intervalSend();
           var peerId = data['from'];
           var description = data['description'];
           var media = data['media'];
@@ -249,6 +291,7 @@ class Signaling {
               media: media,
               screenSharing: false);
           _sessions[sessionId] = newSession;
+          log('session created');
           await newSession.pc?.setRemoteDescription(
               RTCSessionDescription(description['sdp'], description['type']));
           await _createAnswer(newSession, media);
@@ -258,6 +301,7 @@ class Signaling {
               await newSession.pc?.addCandidate(candidate);
               log('candidates added');
             });
+            log('candidatesssssssssssssssssssssss!!!!!!');
             newSession.remoteCandidates.clear();
           }
           onCallStateChange?.call(newSession, CallState.CallStateNew);
@@ -267,6 +311,8 @@ class Signaling {
         break;
       case 'answer':
         {
+          setIntervalSender();
+          _intervalsender?.intervalSend();
           var description = data['description'];
           var sessionId = data['session_id'];
           var session = _sessions[sessionId];
@@ -439,7 +485,7 @@ class Signaling {
     // if (media != 'data')
     //   _localStream =
     //       await createStream(media, screenSharing, context: _context);
-    print(_iceServers);
+    //print(_iceServers);
     RTCPeerConnection pc = await createPeerConnection({
       ..._iceServers,
       ...{'sdpSemantics': sdpSemantics}
@@ -456,7 +502,7 @@ class Signaling {
       // and should be thoroughly tested in your own environment.
       await Future.delayed(
           const Duration(milliseconds: 1000),
-          () => _send('candidate', {
+          () => _sendToInterval('candidate', {
                 'to': peerId,
                 'from': _selfId,
                 'candidate': {
@@ -479,6 +525,7 @@ class Signaling {
 
     pc.onDataChannel = (channel) {
       _addDataChannel(newSession, channel);
+      _intervalsender?.stop();
     };
 
     newSession.pc = pc;
@@ -563,6 +610,14 @@ class Signaling {
     request["data"] = data;
     print('request = '+ request.toString());
     WriteMessage(_encoder.convert(request));
+  }
+
+  void _sendToInterval(event, data) {
+    var request = Map();
+    request["type"] = event;
+    request["data"] = data;
+    print('request = '+ request.toString());
+    _intervalsender?.addContent(_encoder.convert(request));
   }
 
   Future<void> _cleanSessions() async {
