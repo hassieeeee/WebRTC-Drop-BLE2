@@ -9,6 +9,18 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Request legacy Bluetooth permissions on Android 11, API 30 devices. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
+        android:maxSdkVersion="30" />
+    <!-- <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30"/> -->
+    <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED"
+        android:maxSdkVersion="30"/>
+
     <application
         android:label="webrtcdropble2"
         android:name="${applicationName}"
