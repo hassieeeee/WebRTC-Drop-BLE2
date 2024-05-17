@@ -268,8 +268,7 @@ class _DataChannelSampleState extends State<DataChannelSample> {
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
-                              primary: Colors.orange,
-                              onPrimary: Colors.white,
+                              foregroundColor: Colors.white, backgroundColor: Colors.orange,
                             ),
                           ),
                           height: 60,
@@ -290,8 +289,7 @@ class _DataChannelSampleState extends State<DataChannelSample> {
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
-                              primary: Colors.red[400],
-                              onPrimary: Colors.white,
+                              foregroundColor: Colors.white, backgroundColor: Colors.red[400],
                             ),
                           ),
                           height: 60,

@@ -12,6 +12,9 @@ import 'src/call_sample/signaling.dart';
 import 'src/utils/device_info.dart';
 import 'dart:developer';
 
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+
 void main() => runApp(new MyApp());
 
 class MyApp extends StatelessWidget {
@@ -213,6 +216,12 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<Image?> getPictureImage_mobile() async {
+    final ImagePickerPlatform imagePickerImplementation =
+        ImagePickerPlatform.instance;
+    if (imagePickerImplementation is ImagePickerAndroid) {
+      imagePickerImplementation.useAndroidPhotoPicker = true;
+    }
+
     Image? image;
     ImagePicker picker = ImagePicker();
     XFile? xfile = await picker.pickImage(source: ImageSource.gallery);
@@ -379,8 +388,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
-                              primary: Colors.orange,
-                              onPrimary: Colors.white,
+                              foregroundColor: Colors.white, backgroundColor: Colors.orange,
                             ),
                           ),
                           height: 60,
@@ -401,8 +409,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
-                              primary: Colors.red[400],
-                              onPrimary: Colors.white,
+                              foregroundColor: Colors.white, backgroundColor: Colors.red[400],
                             ),
                           ),
                           height: 60,
